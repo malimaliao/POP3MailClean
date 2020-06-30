@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<!--[if IE 8]> <html lang="en" class="ie8"> <![endif]-->
+<!--[if !IE]><!-->
+<html lang="en">
+<!--<![endif]-->
+<head>
+	<meta charset="utf-8" />
+	<title>清理任务</title>
+	<meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" />
+	<!-- ================== BEGIN BASE CSS STYLE ================== -->
+	{% include "inc_head_css.html" %}
+	<!-- ================== END BASE CSS STYLE ================== -->
+
+	<!-- ================== BEGIN PAGE LEVEL STYLE ================== -->
+
+	<!-- ================== END PAGE LEVEL STYLE ================== -->
+
+	<!-- ================== BEGIN BASE JS ================== -->
+	{% include "inc_head_js.html" %}
+	<!-- ================== END BASE JS ================== -->
+</head>
+<body>
+	<!-- begin #page-loader -->
+	<div id="page-loader" class="fade in"><span class="spinner"></span></div>
+	<!-- end #page-loader -->
+
+	<!-- begin #page-container -->
+	<div id="page-container" class="fade page-sidebar-fixed page-header-fixed">
+		<!-- begin #header -->
+		{% include "inc_header.html" %}
+		<!-- end #header -->
+
+		<!-- begin #sidebar -->
+		{% include "inc_sidebar.html" %}
+		<!-- end #sidebar -->
+
+		<!-- begin #content -->
+		<div id="content" class="content">
+
+			<!-- begin row -->
+			<div class="row">
+			    <!-- begin col-12 -->
+			    <div class="col-md-12">
+			        <!-- begin panel -->
+                    <div class="panel panel-danger">
+                        <div class="panel-heading">
+                            <div class="panel-heading-btn">
+                                <a href="javascript:;" class="btn btn-xs btn-icon btn-circle btn-default" data-click="panel-expand"><i class="fa fa-expand"></i></a>
+                                <a href="javascript:;" class="btn btn-xs btn-icon btn-circle btn-warning" data-click="panel-collapse"><i class="fa fa-minus"></i></a>
+                            </div>
+                            <h4 class="panel-title">
+								清理列表：{% for post_id in post_id_list %} {{post_id}}，{% endfor %}
+							</h4>
+                        </div>
+                        <div class="alert alert-danger fade in">
+                            <div class="media media-sm">
+								<div class="media-left" id="include_work_load">
+									<i class="fa fa-recycle fa-4x"></i>
+								</div>
+								<div class="media-body">
+									<h4 class="media-heading" id="include_work_title">警告</h4>
+									<h6 id="include_status"> </h6>
+									<h6 id="include_task">本作业一旦执行则删除的邮件将从服务器直接删除！</h6>
+								</div>
+							</div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>编号</th>
+                                            <th>名称</th>
+                                            <th>账号</th>
+                                            <th>密码</th>
+                                            <th>保留天数</th>
+                                            <th class="text-danger">登录状态</th>
+                                            <th class="text-danger">邮件数量</th>
+                                            <th class="text-danger">占用空间</th>
+                                            <th class="text-danger">登录信息</th>
+                                            <th class="text-success">已删除</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="include_list">
+
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="alert alert-warning">
+			                    <i class="fa fa-info-circle fa-lg m-r-5 pull-left m-t-2"></i>
+                                执行清理任务过程中请勿刷新本页面，否则将影响到任务的正常进行。
+                                如果您需要停止任务，可以点击右上角退出系统按钮或点击其他页面链接即可逐渐停止任务。
+                                而如果您强制关闭浏览器，否则系统仍然在后台进行直至任务自动结束。
+			                </div>
+                            <div>
+                                <a href="/status/" class="btn btn-sm btn-success m-r-5">返回刷新账号状态列表</a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- end panel -->
+                </div>
+                <!-- end col-12 -->
+            </div>
+            <!-- end row -->
+		</div>
+		<!-- end #content -->
+
+		<!-- begin scroll to top btn -->
+		<a href="javascript:;" class="btn btn-icon btn-circle btn-success btn-scroll-to-top fade" data-click="scroll-top"><i class="fa fa-angle-up"></i></a>
+		<!-- end scroll to top btn -->
+	</div>
+	<!-- end page container -->
+
+	<!-- ================== BEGIN BASE JS ================== -->
+	{% include "inc_foot_base_js.html" %}
+    <script type="text/javascript" src="{{url_for('static',filename='js/socket.io.min.js')}}"></script>
+	<!-- ================== END BASE JS ================== -->
+
+	<!-- ================== BEGIN PAGE LEVEL JS ================== -->
+	<audio src="{{url_for('static',filename='audio/ding.wav')}}" preload="auto" id="bgMusic" hidden="hidden"></audio>
+	<script src="{{url_for('static',filename='js/apps.min.js')}}"></script>
+	<!-- ================== END PAGE LEVEL JS ================== -->
+
+	<script>
+		$(document).ready(function() {
+			App.init();
+			PagesClassActive(); //page.js 根据页面地址激活对应class active
+            showTime();//显示系统实际showTime()函数
+			//SocketIO Start
+			namespace = '/mc_socket_io';
+			var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port + namespace); // 建立 /mc_socket_io 命名空间的io连接
+			socket.emit('server_task',{'msg':'start'}); // 向IO命名空间 /mc_socket_io 的server_task，发送msg=start信号
+			//var socket = io.connect(); // 建立io连接
+			//监听server_response：io account 输出（实际上是在clean之后）
+			socket.on('MC_task_print', function(msg) {
+				var list_tr = '';
+				list_tr += '<tr>';
+				list_tr += '<td>' + msg.id + '</td>';
+				list_tr += '<td>' + msg.name + '</td>';
+				list_tr += '<td>' + msg.user + '</td>';
+				list_tr += '<td>' + msg.pass + '</td>';
+				list_tr += '<td>' + msg.keep + '</td>';
+				list_tr += '<td>' + msg.login_status + '</td>';
+				list_tr += '<td>' + msg.before_sum + '</td>';
+				list_tr += '<td>' + msg.before_size + ' Mb</td>';
+				list_tr += '<td>' + msg.login_welcome + '</td>';
+				list_tr += '<td>' + msg.delete_sum + '</td>';
+				list_tr += '</tr>';
+				$('#include_list').append(list_tr);
+			});
+			//监听 MC_io 输出
+			socket.on('MC_io', function(res) {
+			    // 状态
+				// console.log(res.status); // 输出chrome log
+				$('#include_status').html(res.status);  // 输出io状态
+				// 实时清理数据
+				$('#include_task').html(res.data);
+				// 标题
+				var io_title = res.title
+				if(io_title !== null && io_title !== undefined){
+					$('#include_work_title').html(io_title);
+					if(io_title.search('task_end') != -1){
+						var audio = document.getElementById("bgMusic");
+						audio.play();
+					}
+				}
+				// 动画
+				$('#include_work_load').html(res.gif);
+
+			});
+			//SocketIO Stop
+		});
+	</script>
+</body>
+</html>

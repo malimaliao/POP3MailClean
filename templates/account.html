@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!--[if IE 8]> <html lang="en" class="ie8"> <![endif]-->
+<!--[if !IE]><!-->
+<html lang="en">
+<!--<![endif]-->
+<head>
+	<meta charset="utf-8" />
+	<title>邮箱账号</title>
+	<meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" />
+	<!-- ================== BEGIN BASE CSS STYLE ================== -->
+	{% include "inc_head_css.html" %}
+	<!-- ================== END BASE CSS STYLE ================== -->
+
+	<!-- ================== BEGIN PAGE LEVEL STYLE ================== -->
+
+	<!-- ================== END PAGE LEVEL STYLE ================== -->
+
+	<!-- ================== BEGIN BASE JS ================== -->
+	{% include "inc_head_js.html" %}
+	<!-- ================== END BASE JS ================== -->
+</head>
+<body>
+	<!-- begin #page-loader -->
+	<div id="page-loader" class="fade in"><span class="spinner"></span></div>
+	<!-- end #page-loader -->
+
+	<!-- begin #page-container -->
+	<div id="page-container" class="fade page-sidebar-fixed page-header-fixed">
+		<!-- begin #header -->
+		{% include "inc_header.html" %}
+		<!-- end #header -->
+
+		<!-- begin #sidebar -->
+		{% include "inc_sidebar.html" %}
+		<!-- end #sidebar -->
+
+		<!-- begin #content -->
+		<div id="content" class="content">
+
+			<!-- begin row -->
+			<div class="row">
+			    <!-- begin col-list -->
+			    <div class="col-md-6 ui-sortable">
+			        <!-- begin panel -->
+                    <div class="panel panel-info">
+                        <div class="panel-heading">
+                            <div class="panel-heading-btn">
+                                <a href="javascript:;" class="btn btn-xs btn-icon btn-circle btn-default" data-click="panel-expand"><i class="fa fa-expand"></i></a>
+                                <a href="javascript:;" class="btn btn-xs btn-icon btn-circle btn-warning" data-click="panel-collapse"><i class="fa fa-minus"></i></a>
+                            </div>
+                            <h4 class="panel-title">账号信息</h4>
+                        </div>
+                        <div class="panel-body">
+                            <form action="/account/update" method="post">
+                                <div class="form-group">
+                                    <label>用户名称：</label>
+                                    <input name="mail_user" value="{{account_data[1]}}" type="text" class="form-control" required />
+                                </div>
+								<div class="form-group">
+                                    <label>邮箱账号：</label>
+                                    <input name="mail_account" value="{{account_data[2]}}" type="text" class="form-control" required />
+                                </div>
+								<div class="form-group">
+                                    <label>邮箱密码：</label>
+                                    <input name="mail_password" value="{{account_data[3]}}" type="text" class="form-control" required />
+                                </div>
+								<div class="form-group">
+                                    <label>保留天数：</label>
+                                    <input name="mail_keeptime" value="{{account_data[4]}}" type="number" class="form-control" required />
+                                </div>
+								<!--
+                                <div class="form-group">
+                                    <label>分类部门</label>
+                                    <div>
+                                        <select class="form-control">
+                                            <option>1</option>
+                                            <option>2</option>
+                                            <option>3</option>
+                                            <option>4</option>
+                                            <option>5</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                -->
+                                <div class="checkbox">
+									<label>
+										<input id="select_clear" name="mail_status" type="checkbox"> 是否清理
+									</label>
+									<script>
+										var check = {{account_data[5]}};
+										if(check == 1){
+											document.querySelector('input[type="checkbox"]').checked = true;
+										}
+									</script>
+								</div>
+								<br/>
+								<input name="mail_id" value="{{account_data[0]}}" type="hidden"/>
+                                <button type="submit" class="btn btn-sm btn-primary m-r-5">提交修改</button>
+                            </form>
+                        </div>
+                    </div>
+                    <!-- end panel -->
+                </div>
+                <!-- end col-list -->
+            </div>
+            <!-- end row -->
+		</div>
+		<!-- end #content -->
+
+		<!-- begin scroll to top btn -->
+		<a href="javascript:;" class="btn btn-icon btn-circle btn-success btn-scroll-to-top fade" data-click="scroll-top"><i class="fa fa-angle-up"></i></a>
+		<!-- end scroll to top btn -->
+	</div>
+	<!-- end page container -->
+
+	<!-- ================== BEGIN BASE JS ================== -->
+	{% include "inc_foot_base_js.html" %}
+	<!-- ================== END BASE JS ================== -->
+
+	<!-- ================== BEGIN PAGE LEVEL JS ================== -->
+	<script src="{{url_for('static',filename='js/apps.min.js')}}"></script>
+	<!-- ================== END PAGE LEVEL JS ================== -->
+
+	<script>
+		$(document).ready(function() {
+			App.init();
+			PagesClassActive(); //page.js 根据页面地址激活对应class active
+		});
+	</script>
+</body>
+</html>
