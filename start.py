@@ -22,6 +22,8 @@ import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
 from email.utils import parsedate_to_datetime, formatdate, parsedate
+# 线程池
+from multiprocessing.dummy import Pool as ThreadPool
 
 # 可修改的参数
 MC_web_ip = '0.0.0.0'  # 本软件运行IP，一般默认（只有运行本软件的环境处于多个IP才需要修改）
@@ -44,11 +46,11 @@ MC_report_to = ['xxx@qq.com']  # 接收邮箱，['xxx@163.com', 'xxx@qq.com']  #
 MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注释掉或者为[]
 
 # 固定参数
-DATABASE = 'mail_clean.db'  # 本软件的数据库文件
-#DATABASE = 'backup/20200622.db'  # 调试数据库
+# DATABASE = 'mail_clean.db'  # 本软件的数据库文件
+DATABASE = 'mail_clean.db'  # 调试数据库
 _MC_name = 'POP3MailClean'
-_MC_version = '20200623-1'
-_MC_debug = False
+_MC_version = '20200624-1'
+_MC_debug = True
 _socket_task_timer = 3  # 每个账号之间隔时间，秒
 _socket_io_name_space = '/mc_socket_io'  # socket io命名空间
 _socket_task_account_data = dict()  # socket io task 任务列表
@@ -251,7 +253,7 @@ def show_list_account_status():
     return render_template('list_status.html', email_list=_email_list, email_sum=len(_email_list))
 
 
-# 127.0.0.1/task/
+# 单线程处理 作业输出
 @app.route('/task/', methods=['POST'])
 def show_task_work():
     if not session.get('MC_system_user'):
@@ -271,8 +273,39 @@ def show_task_work():
         # 根据多个ID查询数据库数据
         account_cur = g.db.execute('SELECT * FROM mail_accounts WHERE ' + _id_sql)
         account_data = account_cur.fetchall()
-        _socket_task_account_data = account_data  # 将数据库查到的指定多个ID的数据汇集并传递给_socket_task_account_data，交由socket的ws://协议在服务层工作
+        # 将数据库查到的指定多个ID的数据汇集并传递给_socket_task_account_data，交由socket的ws://协议在服务层工作
+        _socket_task_account_data = account_data
         return render_template('list_task.html', post_id_list=id_list)
+    else:
+        return render_template('403.html')
+
+
+# 多线程处理 作业输出
+@app.route('/task2/', methods=['POST'])
+def show_task_work2():
+    if not session.get('MC_system_user'):
+        return redirect(url_for('system_login'))
+    if request.method == 'POST':
+        global _socket_task_account_data
+        id_list = request.form.getlist('id_list')
+        _id_sql = ''
+        _id_i = 0
+        _id_list = ''
+        # 合并所需SQL多个ID
+        for account_id in id_list:
+            if _id_i == 0:
+                _id_sql += 'mail_id=' + account_id
+            else:
+                _id_sql += ' or mail_id=' + account_id
+            _id_i = _id_i + 1
+            _id_list += account_id + ','
+        print('用户提交清理ID列表为：' + _id_list)  # 1,2,3,4,5,
+        # 根据多个ID查询数据库数据
+        account_cur = g.db.execute('SELECT * FROM mail_accounts WHERE ' + _id_sql)
+        account_data = account_cur.fetchall()
+        # 将数据库查到的指定多个ID的数据汇集并传递给_socket_task_account_data，交由socket的ws://协议在服务层工作
+        _socket_task_account_data = account_data
+        return render_template('list_tasks.html', post_id_list=_id_list)
     else:
         return render_template('403.html')
 
@@ -308,8 +341,7 @@ def logout():
     return redirect(url_for('system_login'))
 
 
-
-# 邮件单个状态获取
+# 验证邮件账号登录状态
 def query_account(login_user, login_pass):
     status = dict()
     try:
@@ -335,7 +367,7 @@ def query_account(login_user, login_pass):
     return status
 
 
-# 邮件单个清理函数
+# 邮件单个清理函数 调试函数
 def email_clean(login_user, login_pass, keep_day):
     clean_sum = 0
     status = dict()
@@ -390,7 +422,8 @@ def email_clean(login_user, login_pass, keep_day):
     return status
 
 
-def email_report(account_list=None):
+# 自动作业报告
+def email_report(task_accoun_data = None):
     # mail_msg = '<p>Python 邮件发送测试...</p><p><a href="http://www.baidu.com">这是一个链接</a></p>'
     # 采用html模板
     with open('templates/email.html', 'r', encoding='UTF-8') as f:
@@ -414,10 +447,10 @@ def email_report(account_list=None):
         smtpObj.connect(MC_smtp_host, MC_smtp_port)
         smtpObj.login(MC_report_send_login, MC_report_send_password)
         smtpObj.sendmail(MC_report_send, MC_report_to, message.as_string())
-        print("已尝试邮件发送")
+        print("已尝试邮件发送报告")
         smtpObj.quit()
     except smtplib.SMTPException:
-        print("Error: 无法发送邮件")
+        print("Error: 无法发送邮件报告")
 
 
 '''
@@ -451,26 +484,31 @@ def MailClean_io_exit():
     # emit('MC_io', {'status': 'IO 已断开'})
 
 
-# 批量清理账号列表
+# 单线程响应socket server_task 批量清理账号列表
 @socketio.on('server_task', namespace=_socket_io_name_space)
 def io_task_run(data):
+    print('单线程响应清理作业任务')
     global _socket_task_account_data
     io_task_status = data.get('msg')  # 通过 socket 在 _socket_io_name_space 空间接收到的前端传递的任务信号，
     if io_task_status == 'stop':
         _socket_task_account_data = dict()  # 传递了停止信号 重置账号任务列表为空(此处重置了，因此前面需要引用全局变量可写)
     # 检测当前内存中 _socket_task_account_data 即 IO清理的账号任务列表是否有任务
     if len(_socket_task_account_data) < 1:
-        print('投递消息给前端：空任务',_socket_io_name_space)
-        socketio.emit('MC_io', {'data': 'IO任务列表：空'}, namespace=_socket_io_name_space)
+        print('投递消息给前端：空任务', _socket_io_name_space)
+        socketio.emit('MC_io', {'status': 'IO清理任务数量：空'}, namespace=_socket_io_name_space)
     else:
         print('投递消息给前端：执行任务数：' + str(len(_socket_task_account_data)),_socket_io_name_space)
-        socketio.emit('MC_io', {'data': 'IO清理任务：' + str(len(_socket_task_account_data))}, namespace=_socket_io_name_space)
+        socketio.emit('MC_io', {'status': 'IO清理任务数量：' + str(len(_socket_task_account_data))}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io", {'title': '正在执行作业中，请稍后……'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io", {'gif': '<i class="fa fa-cog fa-spin fa-4x"></i>'}, namespace=_socket_io_name_space)
         # >>>>>>>>>>>>>>>>>>>> 批量任务执行 启动 >>>>>>>>>>>>>>>>>>>>>>>>
         _account = dict()  # 临时账号
         _n = 0  # 临时计数器
         for account in _socket_task_account_data:
             if len(_socket_task_account_data) < 1:  # 拦截器1
                 print('IO后台清理任务被终止：for_account_list')
+                socketio.emit("MC_io", {'title': 'IO任务被用户强行终止！'}, namespace=_socket_io_name_space)
+                socketio.emit("MC_io", {'gif': ' '}, namespace=_socket_io_name_space)
                 break
             _account['id'] = account[0]
             _account['name'] = account[1]
@@ -517,7 +555,7 @@ def io_task_run(data):
                             # 删除完成
                             _account['delete_sum'] = i
                             print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(i))
-                            socketio.emit("MC_io", {'data': _account['user'] + ' MailClean:clean_success'}, namespace=_socket_io_name_space)
+                            socketio.emit("MC_io", {'data': _account['user'] + ': clean_success'}, namespace=_socket_io_name_space)
                             break
                     except ParserError:
                         print(_account['user'] + ">>>>  正在删除：第{}封，日期：没有".format(i + 1))
@@ -535,10 +573,7 @@ def io_task_run(data):
                 _account['delete_sum'] = 0
             # pop3 logout
             _n = _n + 1
-            if _n != len(_socket_task_account_data):
-                socketio.emit("MC_io", {'title': '正在执行作业中，请稍后……'}, namespace=_socket_io_name_space)
-                socketio.emit("MC_io", {'gif': '<i class="fa fa-cog fa-spin fa-4x"></i>'}, namespace=_socket_io_name_space)
-            else:
+            if _n == len(_socket_task_account_data):
                 print('全部处理完毕！')
                 socketio.emit("MC_io", {'title': '全部处理完毕！MailClean:task_end'}, namespace=_socket_io_name_space)
                 socketio.emit("MC_io", {'gif': '<i class="fa fa-smile fa-4x"></i>'}, namespace=_socket_io_name_space)
@@ -548,6 +583,110 @@ def io_task_run(data):
             socketio.emit("MC_task_print", _account, namespace=_socket_io_name_space)
             socketio.sleep(_socket_task_timer)
         # >>>>>>>>>>>>>>>>>>>> 批量任务执行 结束 >>>>>>>>>>>>>>>>>>>>>>>>
+
+
+# 多线程响应socket server_task2 批量清理账号列表
+@socketio.on('server_task2', namespace=_socket_io_name_space)
+def io_task_run2(data):
+    global _socket_task_account_data
+    io_task_status = data.get('msg')  # 在 _socket_io_name_space 空间接收到的前端传递的任务信号，
+    print('接收消息来自前端：', io_task_status)
+    if io_task_status == 'stop':
+        _socket_task_account_data = []
+    # 检测当前socket是否传递清理ID
+    if len(_socket_task_account_data) < 1:
+        print('投递消息给前端：空任务', _socket_io_name_space)
+        socketio.emit('MC_io2', {'status': '清理任务：任务是空的'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io2", {'title': '当前没有清理作业任务'}, namespace=_socket_io_name_space)
+    else:
+        print('投递消息给前端：执行任务数：' + str(len(_socket_task_account_data)), _socket_io_name_space)
+        socketio.emit('MC_io2', {'status': '清理任务：' + str(len(_socket_task_account_data)) + '个线程任务'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io2", {'title': '正在执行清理作业中，请稍后……'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io2", {'gif': '<i class="fa fa-cog fa-spin fa-4x"></i>'}, namespace=_socket_io_name_space)
+        # 创建线程池
+        pool = ThreadPool()
+        pool.map(thread_clean_account, _socket_task_account_data)
+        pool.close()
+        pool.join()
+        #  输出结束
+        socketio.emit('MC_io2', {'status': '清理任务：已经结束！'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io2", {'title': '全部处理完毕！MailClean:task_end'}, namespace=_socket_io_name_space)
+        socketio.emit("MC_io2", {'gif': '<i class="fa fa-smile fa-4x"></i>'}, namespace=_socket_io_name_space)
+        if MC_report_task:
+            email_report(_socket_task_account_data)
+
+
+# 接收一个账号，并对该账号进行清理，输出socket给前端
+def thread_clean_account(account):
+    print('处理作业线程：', account)
+    _account = dict()
+    _account['id'] = account[0]
+    _account['name'] = account[1]
+    _account['user'] = account[2]
+    _account['pass'] = account[3]
+    _account['keep'] = account[4]
+    _account['delete_sum'] = 0
+    socketio.emit("MC_io2", {'id': _account['id']}, namespace=_socket_io_name_space)
+    # pop3 login
+    try:
+        pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+        pop3_server.user(_account['user'])
+        pop3_server.pass_(_account['pass'])
+        pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
+        this_mail_sum = pop3_server_status[0]  # 邮件数量
+        this_mail_size = "{:.2f}".format(pop3_server_status[1] / 1024 / 1024)  # 邮件大小，截取3位小数点
+        mail_welcome = str(pop3_server.getwelcome())
+        print(_account['user'] + ' 登录成功' + mail_welcome)
+        _account['login_welcome'] = str(mail_welcome)
+        _account['before_sum'] = this_mail_sum
+        _account['before_size'] = this_mail_size
+        # 清除工作 开始
+        resp, mails, octets = pop3_server.list()
+        print(">>>>  响应信息：", resp)
+        for i in range(this_mail_sum):
+            if len(_socket_task_account_data) < 1:  # 拦截器2
+                print('IO后台清理任务被终止：for_mail_list')
+                break
+            # 可以获得整个邮件的原始文本:
+            resp, mail_content, octets = pop3_server.retr(i + 1)
+            try:
+                msg_content = Parser().parsestr(b'\r\n'.join(mail_content).decode("iso8859", ""))
+                date_str = msg_content.get("Date", "")
+                print(">>>>  当前邮件日期字符：", date_str)
+                # Wed, 27 Mar 2019 13:30:04 +0800 (GMT+08:00) 这种时间出现时，使用dateutil.parser.parse会报错
+                # mail_date = dateutil.parser.parse(date_str)
+                mail_date = parsedate_to_datetime(date_str)  # 改进后的转化时间方式
+                print('>>>>  当前邮件日期转化：', mail_date)
+                # 判断多少天前的邮件
+                if mail_date.date() < datetime.datetime.now().date() - datetime.timedelta(days=_account['keep']):
+                    print(
+                        _account['user'] + ">>>>  正在删除：第{}封，日期：{} {}".format(i + 1, mail_date.date(), mail_date.time()))
+                    socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + '正在删除：' + _account['user'] + '中的第' + str(i + 1) + '封邮件，日期：' + str(mail_date.date()) + ' ' + str(mail_date.time())}, namespace=_socket_io_name_space)
+                    pop3_server.dele(i + 1)
+                else:
+                    # 删除完成
+                    _account['delete_sum'] = i
+                    print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(i))
+                    socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + _account['user'] + ' 处理完毕.'}, namespace=_socket_io_name_space)
+                    break
+            except ParserError:
+                print(_account['user'] + ">>>>  正在删除：第{}封，日期：没有".format(i + 1))
+                socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + '正在删除' + _account['user'] + '中的第' + str(i + 1) + '封邮件，日期：空'}, namespace=_socket_io_name_space)
+                pop3_server.dele(i + 1)
+        # 清除工作 完毕
+        _account['login_status'] = '完成'
+        pop3_server.quit()
+    except Exception as error:
+        print(_account['user'] + ' 登录或在枚举邮件列表中出错：' + str(error))
+        _account['login_status'] = '异常'
+        _account['login_welcome'] = str(error)
+        _account['before_sum'] = 0
+        _account['before_size'] = 0
+        _account['delete_sum'] = 0
+    # pop3 logout
+    # 将本账号的清理数据投递给 MC_task_print
+    socketio.emit("MC_task2_print", _account, namespace=_socket_io_name_space)
+    socketio.sleep(_socket_task_timer)
 
 
 if __name__ == '__main__':
