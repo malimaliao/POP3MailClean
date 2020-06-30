@@ -46,8 +46,8 @@ MC_report_to = ['xxx@qq.com']  # 接收邮箱，['xxx@163.com', 'xxx@qq.com']  #
 MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注释掉或者为[]
 
 # 固定参数
-# DATABASE = 'mail_clean.db'  # 本软件的数据库文件
-DATABASE = 'mail_clean.db'  # 调试数据库
+DATABASE = 'mail_clean.db'  # 本软件的数据库文件
+#DATABASE = 'D:\\uni.db'  # 调试数据库
 _MC_name = 'POP3MailClean'
 _MC_version = '20200624-1'
 _MC_debug = True
