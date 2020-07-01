@@ -34,9 +34,13 @@ MC_system_pass = 'admin'
 
 MC_pop3_host = '172.33.2.70'  # 邮件服务器地址，域名或ip【即需要管理的POP3服务器】
 MC_pop3_port = 110  # 邮件服务器接收端口
+MC_pop3_ssl = True  # 邮件服务器SSL
+MC_pop3_ssl_port = 995  # 当邮件服务器启用SSL协议时，则对应使用SSL端口
 
-MC_smtp_host = '172.33.2.70'  # 邮件服务器发送端口
-MC_smtp_port = 25  # 邮件服务器发送端口
+MC_smtp_host = '172.33.2.70'  # SMTP服务器发送端口
+MC_smtp_port = 25  # SMTP服务器发送端口
+MC_smtp_ssl = True  # SMTP SSL
+MC_smtp_ssl_port = 465  # 当启用SMTP SSL时采用此端口
 
 MC_report_task = False  # 是否启用任务报告
 MC_report_send_login = 'test'  # 报告发送邮箱账号
@@ -46,8 +50,8 @@ MC_report_to = ['xxx@qq.com']  # 接收邮箱，['xxx@163.com', 'xxx@qq.com']  #
 MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注释掉或者为[]
 
 # 固定参数
-DATABASE = 'mail_clean.db'  # 本软件的数据库文件
-#DATABASE = 'D:\\uni.db'  # 调试数据库
+#DATABASE = 'mail_clean.db'  # 本软件的数据库文件
+DATABASE = 'D:\\uni.db'  # 调试数据库
 _MC_name = 'POP3MailClean'
 _MC_version = '20200624-1'
 _MC_debug = True
@@ -345,7 +349,12 @@ def logout():
 def query_account(login_user, login_pass):
     status = dict()
     try:
-        pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+        if MC_pop3_ssl:
+            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+            print('pop3 ssl login:', login_user)
+        else:
+            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+            print('pop3 login:', login_user)
         pop3_server.user(login_user)
         pop3_server.pass_(login_pass)
         pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -372,7 +381,10 @@ def email_clean(login_user, login_pass, keep_day):
     clean_sum = 0
     status = dict()
     try:
-        pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+        if MC_pop3_ssl:
+            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+        else:
+            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
         pop3_server.user(login_user)
         pop3_server.pass_(login_pass)
         pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -443,8 +455,11 @@ def email_report(task_accoun_data = None):
         message["Cc"] = ','.join(MC_report_cc)  # 对应收件人列表
     message['Subject'] = Header(_MC_name + '任务报告', 'utf-8')  # 邮件主题
     try:
-        smtpObj = smtplib.SMTP()
-        smtpObj.connect(MC_smtp_host, MC_smtp_port)
+        if MC_smtp_ssl:
+            smtpObj = smtplib.SMTP_SSL(MC_smtp_host, MC_smtp_ssl_port)
+        else:
+            smtpObj = smtplib.SMTP()
+            smtpObj.connect(MC_smtp_host, MC_smtp_port)
         smtpObj.login(MC_report_send_login, MC_report_send_password)
         smtpObj.sendmail(MC_report_send, MC_report_to, message.as_string())
         print("已尝试邮件发送报告")
@@ -518,7 +533,10 @@ def io_task_run(data):
             _account['delete_sum'] = 0
             # pop3 login
             try:
-                pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+                if MC_pop3_ssl:
+                    pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+                else:
+                    pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
                 pop3_server.user(_account['user'])
                 pop3_server.pass_(_account['pass'])
                 pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -629,7 +647,10 @@ def thread_clean_account(account):
     socketio.emit("MC_io2", {'id': _account['id']}, namespace=_socket_io_name_space)
     # pop3 login
     try:
-        pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+        if MC_pop3_ssl:
+            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+        else:
+            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
         pop3_server.user(_account['user'])
         pop3_server.pass_(_account['pass'])
         pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
