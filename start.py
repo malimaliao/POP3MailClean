@@ -34,7 +34,7 @@ MC_system_pass = 'admin'
 
 MC_pop3_host = '172.33.2.70'  # 邮件服务器地址，域名或ip【即需要管理的POP3服务器】
 MC_pop3_port = 110  # 邮件服务器接收端口
-MC_pop3_ssl = True  # 邮件服务器SSL
+MC_pop3_ssl = False  # 邮件服务器SSL
 MC_pop3_ssl_port = 995  # 当邮件服务器启用SSL协议时，则对应使用SSL端口
 
 MC_smtp_host = '172.33.2.70'  # SMTP服务器发送端口
@@ -51,9 +51,10 @@ MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注
 
 # 固定参数
 DATABASE = 'mail_clean.db'  # 本软件的数据库文件
-#DATABASE = 'D:\\uni.db'  # 调试数据库
+#DATABASE = r'D:\uni.db'  # 调试数据库
 _MC_name = 'POP3MailClean'
-_MC_version = '20200624-1'
+_MC_version = '2.1'
+_MC_version_time = '2020-7-21 15:49:17'
 _MC_debug = True
 _socket_task_timer = 3  # 每个账号之间隔时间，秒
 _socket_io_name_space = '/mc_socket_io'  # socket io命名空间
@@ -349,6 +350,7 @@ def logout():
 def query_account(login_user, login_pass):
     status = dict()
     try:
+        poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
         if MC_pop3_ssl:
             pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
             print('pop3 ssl login:', login_user)
@@ -378,9 +380,9 @@ def query_account(login_user, login_pass):
 
 # 邮件单个清理函数 调试函数
 def email_clean(login_user, login_pass, keep_day):
-    clean_sum = 0
     status = dict()
     try:
+        poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
         if MC_pop3_ssl:
             pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
         else:
@@ -396,6 +398,7 @@ def email_clean(login_user, login_pass, keep_day):
         # 使用list()返回所有邮件的编号，默认为字节类型的串
         resp, mails, octets = pop3_server.list()
         print(">>>>  响应信息：", resp)
+        clean_sum = 0
         for i in range(this_mail_sum):
             resp, mail_content, octets = pop3_server.retr(i + 1)
             # 可以获得整个邮件的原始文本:
@@ -407,22 +410,22 @@ def email_clean(login_user, login_pass, keep_day):
             print('>>>>  当前邮件日期转化：', mail_date)
             try:
                 # 判断多少天前的邮件
-                if mail_date.date() < datetime.datetime.now().date() - datetime.timedelta(days=keep_day):
+                if mail_date.date() <= datetime.datetime.now().date() - datetime.timedelta(days=keep_day):
                     print(">>>>  正在删除：第{}封，邮件日期：{} {}".format(i + 1, mail_date.date(), mail_date.time()))
                     pop3_server.dele(i + 1)
+                    clean_sum = clean_sum + 1
                 else:
-                    # 删除完成
-                    clean_sum = i
-                    print(">>>>  作业统计：当前账号共计删除{}封邮件".format(i))
-                    break
+                    break  # 跳出任务
             except ParserError:
                 print(">>>>  正在删除：第{}封，邮件日期：没有".format(i + 1))
                 pop3_server.dele(i + 1)
+                clean_sum = clean_sum + 1
         status['login_status'] = 1
         status['login_data'] = str(mail_welcome)
         status['before_sum'] = this_mail_sum
         status['before_size'] = this_mail_size
         status['after_sum'] = clean_sum
+        print(">>>>  作业统计：当前账号共计删除{}封邮件".format(clean_sum))
         pop3_server.quit()
     except Exception as error:
         print(login_user + ' 登录或枚举邮件列表出错：' + str(error))
@@ -533,6 +536,7 @@ def io_task_run(data):
             _account['delete_sum'] = 0
             # pop3 login
             try:
+                poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
                 if MC_pop3_ssl:
                     pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
                 else:
@@ -550,6 +554,7 @@ def io_task_run(data):
                 # 清除工作 开始
                 resp, mails, octets = pop3_server.list()
                 print(">>>>  响应信息：", resp)
+                task_i = 0
                 for i in range(this_mail_sum):
                     if len(_socket_task_account_data) < 1:  # 拦截器2
                         print('IO后台清理任务被终止：for_mail_list')
@@ -565,22 +570,24 @@ def io_task_run(data):
                         mail_date = parsedate_to_datetime(date_str)  # 改进后的转化时间方式
                         print('>>>>  当前邮件日期转化：', mail_date)
                         # 判断多少天前的邮件
-                        if mail_date.date() < datetime.datetime.now().date() - datetime.timedelta(days=_account['keep']):
+                        if mail_date.date() <= datetime.datetime.now().date() - datetime.timedelta(days=_account['keep']):
+                            # 执行任务
                             print(_account['user'] + ">>>>  正在删除：第{}封，日期：{} {}".format(i + 1, mail_date.date(), mail_date.time()))
                             socketio.emit("MC_io", {'data': '正在删除：' + _account['user'] + '账号中的第<span class="text-danger">' + str(i + 1) + '</span>封邮件，日期：' + str(mail_date.date()) + ' ' + str(mail_date.time())}, namespace=_socket_io_name_space)
                             pop3_server.dele(i + 1)
+                            task_i = task_i + 1
                         else:
-                            # 删除完成
-                            _account['delete_sum'] = i
-                            print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(i))
-                            socketio.emit("MC_io", {'data': _account['user'] + ': clean_success'}, namespace=_socket_io_name_space)
-                            break
+                            break  # 跳出任务
                     except ParserError:
                         print(_account['user'] + ">>>>  正在删除：第{}封，日期：没有".format(i + 1))
                         socketio.emit("MC_io", {'data': '正在删除' + _account['user'] + '账号中的第' + str(i + 1) + '封邮件，日期：空'}, namespace=_socket_io_name_space)
                         pop3_server.dele(i + 1)
+                        task_i = task_i + 1
                 # 清除工作 完毕
                 _account['login_status'] = '完成'
+                _account['delete_sum'] = task_i
+                print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(task_i))
+                socketio.emit("MC_io", {'data': _account['user'] + ': clean_success'}, namespace=_socket_io_name_space)
                 pop3_server.quit()
             except Exception as error:
                 print(_account['user'] + ' 登录或在枚举邮件列表中出错：' + str(error))
@@ -647,6 +654,7 @@ def thread_clean_account(account):
     socketio.emit("MC_io2", {'id': _account['id']}, namespace=_socket_io_name_space)
     # pop3 login
     try:
+        poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
         if MC_pop3_ssl:
             pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
         else:
@@ -664,6 +672,7 @@ def thread_clean_account(account):
         # 清除工作 开始
         resp, mails, octets = pop3_server.list()
         print(">>>>  响应信息：", resp)
+        task_i = 0
         for i in range(this_mail_sum):
             if len(_socket_task_account_data) < 1:  # 拦截器2
                 print('IO后台清理任务被终止：for_mail_list')
@@ -679,23 +688,22 @@ def thread_clean_account(account):
                 mail_date = parsedate_to_datetime(date_str)  # 改进后的转化时间方式
                 print('>>>>  当前邮件日期转化：', mail_date)
                 # 判断多少天前的邮件
-                if mail_date.date() < datetime.datetime.now().date() - datetime.timedelta(days=_account['keep']):
+                if mail_date.date() <= datetime.datetime.now().date() - datetime.timedelta(days=_account['keep']):
                     print(
                         _account['user'] + ">>>>  正在删除：第{}封，日期：{} {}".format(i + 1, mail_date.date(), mail_date.time()))
                     socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + '正在删除：' + _account['user'] + '中的第' + str(i + 1) + '封邮件，日期：' + str(mail_date.date()) + ' ' + str(mail_date.time())}, namespace=_socket_io_name_space)
                     pop3_server.dele(i + 1)
                 else:
-                    # 删除完成
-                    _account['delete_sum'] = i
-                    print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(i))
-                    socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + _account['user'] + ' 处理完毕.'}, namespace=_socket_io_name_space)
-                    break
+                    break  # 跳出任务
             except ParserError:
                 print(_account['user'] + ">>>>  正在删除：第{}封，日期：没有".format(i + 1))
                 socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + '正在删除' + _account['user'] + '中的第' + str(i + 1) + '封邮件，日期：空'}, namespace=_socket_io_name_space)
                 pop3_server.dele(i + 1)
         # 清除工作 完毕
         _account['login_status'] = '完成'
+        _account['delete_sum'] = task_i
+        print(_account['user'] + ">>>>  清理完成：共计删除{}封邮件".format(task_i))
+        socketio.emit("MC_io2", {'id': _account['id'], 'data': '清理作业：' + _account['user'] + ' 处理完毕.'}, namespace=_socket_io_name_space)
         pop3_server.quit()
     except Exception as error:
         print(_account['user'] + ' 登录或在枚举邮件列表中出错：' + str(error))
