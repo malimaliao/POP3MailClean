@@ -51,10 +51,9 @@ MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注
 
 # 固定参数
 DATABASE = 'mail_clean.db'  # 本软件的数据库文件
-#DATABASE = r'D:\uni.db'  # 调试数据库
 _MC_name = 'POP3MailClean'
 _MC_version = '2.1'
-_MC_version_time = '2020-7-21 15:49:17'
+_MC_version_time = '2021-3-18 09:50:31'
 _MC_debug = True
 _socket_task_timer = 3  # 每个账号之间隔时间，秒
 _socket_io_name_space = '/mc_socket_io'  # socket io命名空间
