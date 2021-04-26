@@ -1,5 +1,7 @@
 # POP3MailClean
 
+https://github.com/malimaliao/POP3MailClean
+
 pop3 server mail clean.
 
 本软件采用C/S架构，基于Python3 + Flask + Sqlite3环境部署，使用poplib、smtplib实现POP3服务器远程邮件账号的批量清理，并结合SocketIO 、HTML5技术输出实时清理状态。

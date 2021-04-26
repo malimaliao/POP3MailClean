@@ -32,12 +32,12 @@ MC_web_port = 8088  # 本软件运行端口号，一般默认，可根据需要�
 MC_system_user = 'admin'
 MC_system_pass = 'admin'
 
-MC_pop3_host = '172.33.2.70'  # 邮件服务器地址，域名或ip【即需要管理的POP3服务器】
+MC_pop3_host = '127.0.0.1'  # 邮件服务器地址，域名或ip【即需要管理的POP3服务器】
 MC_pop3_port = 110  # 邮件服务器接收端口
 MC_pop3_ssl = False  # 邮件服务器SSL
 MC_pop3_ssl_port = 995  # 当邮件服务器启用SSL协议时，则对应使用SSL端口
 
-MC_smtp_host = '172.33.2.70'  # SMTP服务器发送端口
+MC_smtp_host = '127.0.0.1'  # SMTP服务器发送端口
 MC_smtp_port = 25  # SMTP服务器发送端口
 MC_smtp_ssl = True  # SMTP SSL
 MC_smtp_ssl_port = 465  # 当启用SMTP SSL时采用此端口
