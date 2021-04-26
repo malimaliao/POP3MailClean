@@ -6,59 +6,48 @@ from __future__ import with_statement
 from contextlib import closing
 import sqlite3
 from flask import Flask, request, session, g, redirect, url_for, abort, render_template, flash
+
 # pop3
 import poplib
 from email.parser import Parser
 from parser import ParserError
+
 # SocketIO
 from flask_socketio import SocketIO, emit
-# threading
-import datetime
+
+# 线程
 from threading import Lock
+# 线程池
+from multiprocessing.dummy import Pool as ThreadPool
+
 # os
 import os
+import platform
+import datetime
+
+# ini
+from configobj import ConfigObj
+
 # SMTP
 import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
 from email.utils import parsedate_to_datetime, formatdate, parsedate
-# 线程池
-from multiprocessing.dummy import Pool as ThreadPool
-
-# 可修改的参数
-MC_web_ip = '0.0.0.0'  # 本软件运行IP，一般默认（只有运行本软件的环境处于多个IP才需要修改）
-MC_web_port = 8088  # 本软件运行端口号，一般默认，可根据需要修改
-
-MC_system_user = 'admin'
-MC_system_pass = 'admin'
-
-MC_pop3_host = '127.0.0.1'  # 邮件服务器地址，域名或ip【即需要管理的POP3服务器】
-MC_pop3_port = 110  # 邮件服务器接收端口
-MC_pop3_ssl = False  # 邮件服务器SSL
-MC_pop3_ssl_port = 995  # 当邮件服务器启用SSL协议时，则对应使用SSL端口
-
-MC_smtp_host = '127.0.0.1'  # SMTP服务器发送端口
-MC_smtp_port = 25  # SMTP服务器发送端口
-MC_smtp_ssl = True  # SMTP SSL
-MC_smtp_ssl_port = 465  # 当启用SMTP SSL时采用此端口
-
-MC_report_task = False  # 是否启用任务报告
-MC_report_send_login = 'test'  # 报告发送邮箱账号
-MC_report_send_password = '123456'  # 报告发送邮箱密码
-MC_report_send = 'xx@xxx.com'  # 报告发送邮箱
-MC_report_to = ['xxx@qq.com']  # 接收邮箱，['xxx@163.com', 'xxx@qq.com']  ## 多个邮件接收人
-MC_report_cc = []  # 抄送邮箱，['xxx@163.com', 'xxx@qq.com']，没有则注释掉或者为[]
 
 # 固定参数
-DATABASE = 'mail_clean.db'  # 本软件的数据库文件
 _MC_name = 'POP3MailClean'
-_MC_version = '2.1'
-_MC_version_time = '2021-3-18 09:50:31'
-_MC_debug = True
+_MC_version = '2.2'
+_MC_version_time = '2021-04-26'
+_MC_config_file = 'config.ini'
+_MC_config_ini_obj = ConfigObj(_MC_config_file, encoding='UTF8')
 _socket_task_timer = 3  # 每个账号之间隔时间，秒
 _socket_io_name_space = '/mc_socket_io'  # socket io命名空间
 _socket_task_account_data = dict()  # socket io task 任务列表
 _socket_async_mode = 'threading'  # socket工作模式，threading、eventlet、gevent
+
+DATABASE_dir = 'db'  # 数据应用目录
+DATABASE = DATABASE_dir + os.sep + 'data.db'  # 本软件的数据库文件
+DATABASE_default = DATABASE_dir + os.sep + 'default.db'  # 本软件的数据库文件
 
 app = Flask(__name__)
 app.config.from_object(__name__)
@@ -75,19 +64,22 @@ def connect_db():
     return sqlite3.connect(app.config['DATABASE'])
 
 
-def init_db():
+def create_init_db():
     # 通过sql脚本提交方式，初始化并建立一个数据库
+    print('--- 创建初始数据库 ---')
     with closing(connect_db()) as db:
-        with app.open_resource('init_default.sql') as f:
+        with app.open_resource(DATABASE_dir + os.sep + 'init.sql') as f:
             sql = f.read().decode('utf-8')
             db.cursor().executescript(sql)
         db.commit()
 
 
-def copy_default_sql():
-    print('初始化，以复制形式建立一个空数据库')
-    # 通过拷贝原默认db的方式初始化一个数据，该方法未使用，需 import shutil 模块
-    # shutil.copy(old_file, new_file)
+def copy_default_db():
+    print('--- 映像默认数据库 ---')
+    if platform.system().lower() == 'windows':
+        os.system('copy '+DATABASE_default+' '+DATABASE)
+    elif platform.system().lower() == 'linux':
+        os.system('cp '+DATABASE_default+' '+DATABASE)
 
 
 @app.before_request
@@ -323,11 +315,11 @@ def system_login():
 # /login/
 @app.route('/login/check', methods=['POST'])
 def system_login_check():
-    _login_user = request.form.get('login_user')
-    _login_pass = request.form.get('login_pass')
-    if _login_user == MC_system_user and _login_pass == MC_system_pass:
-        session['MC_system_user'] = _login_user
-        session['MC_system_pass'] = _login_pass
+    login_user = request.form.get('login_user')
+    login_pass = request.form.get('login_pass')
+    if login_user == _MC_config_ini_obj['flask']['login_user'] and login_pass == _MC_config_ini_obj['flask']['login_user']:
+        session['MC_system_user'] = login_user
+        session['MC_system_pass'] = login_pass
         return redirect(url_for('system_index'))
     else:
         flash('账号密码不正确！')  # 密码错误！
@@ -350,11 +342,11 @@ def query_account(login_user, login_pass):
     status = dict()
     try:
         poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
-        if MC_pop3_ssl:
-            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+        if _MC_config_ini_obj['pop3']['ssl_enable'] == '1':
+            pop3_server = poplib.POP3_SSL(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['ssl_port'])
             print('pop3 ssl login:', login_user)
         else:
-            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+            pop3_server = poplib.POP3(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['port'])
             print('pop3 login:', login_user)
         pop3_server.user(login_user)
         pop3_server.pass_(login_pass)
@@ -382,10 +374,10 @@ def email_clean(login_user, login_pass, keep_day):
     status = dict()
     try:
         poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
-        if MC_pop3_ssl:
-            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+        if _MC_config_ini_obj['pop3']['ssl_enable'] == '1':
+            pop3_server = poplib.POP3_SSL(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['ssl_port'])
         else:
-            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+            pop3_server = poplib.POP3(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['port'])
         pop3_server.user(login_user)
         pop3_server.pass_(login_pass)
         pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -451,19 +443,19 @@ def email_report(task_accoun_data = None):
         mail_msg = html_txt.replace('<!--$datatime-->', str(datetime.datetime.now()))
     message = MIMEText(mail_msg, "html", "utf-8")
     # 标准邮件需要三个头部信息： From, To, 和 Subject
-    message["From"] = MC_report_send  # 对应发件人
-    message["To"] = ','.join(MC_report_to)  # 对应收件人列表
-    if len(MC_report_cc) > 0:
-        message["Cc"] = ','.join(MC_report_cc)  # 对应收件人列表
+    message["From"] = _MC_config_ini_obj['report']['mail_from']  # 对应发件人
+    message["To"] = ','.join(_MC_config_ini_obj['report']['mail_to'].split[','])  # 对应收件人列表
+    if len(_MC_config_ini_obj['report']['mail_cc'].split[',']) > 0:
+        message["Cc"] = ','.join(_MC_config_ini_obj['report']['mail_cc'].split[','])  # 对应收件人列表
     message['Subject'] = Header(_MC_name + '任务报告', 'utf-8')  # 邮件主题
     try:
-        if MC_smtp_ssl:
-            smtpObj = smtplib.SMTP_SSL(MC_smtp_host, MC_smtp_ssl_port)
+        if _MC_config_ini_obj['smtp']['ssl_enable'] == '1':
+            smtpObj = smtplib.SMTP_SSL(_MC_config_ini_obj['smtp']['host'], int(_MC_config_ini_obj['smtp']['ssl_port']))
         else:
             smtpObj = smtplib.SMTP()
-            smtpObj.connect(MC_smtp_host, MC_smtp_port)
-        smtpObj.login(MC_report_send_login, MC_report_send_password)
-        smtpObj.sendmail(MC_report_send, MC_report_to, message.as_string())
+            smtpObj.connect(_MC_config_ini_obj['smtp']['host'], int(_MC_config_ini_obj['smtp']['port']))
+        smtpObj.login(_MC_config_ini_obj['smtp']['login_user'], _MC_config_ini_obj['flask']['login_pass'])
+        smtpObj.sendmail(_MC_config_ini_obj['report']['mail_from'], _MC_config_ini_obj['report']['mail_to'].split[','], message.as_string())
         print("已尝试邮件发送报告")
         smtpObj.quit()
     except smtplib.SMTPException:
@@ -536,10 +528,10 @@ def io_task_run(data):
             # pop3 login
             try:
                 poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
-                if MC_pop3_ssl:
-                    pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+                if _MC_config_ini_obj['pop3']['ssl_enable'] == '1':
+                    pop3_server = poplib.POP3_SSL(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['ssl_port'])
                 else:
-                    pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+                    pop3_server = poplib.POP3(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['port'])
                 pop3_server.user(_account['user'])
                 pop3_server.pass_(_account['pass'])
                 pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -601,7 +593,7 @@ def io_task_run(data):
                 print('全部处理完毕！')
                 socketio.emit("MC_io", {'title': '全部处理完毕！MailClean:task_end'}, namespace=_socket_io_name_space)
                 socketio.emit("MC_io", {'gif': '<i class="fa fa-smile fa-4x"></i>'}, namespace=_socket_io_name_space)
-                if MC_report_task:
+                if _MC_config_ini_obj['task']['mail_enable'] == '1':
                     email_report(_socket_task_account_data)
             # 将本账号的清理数据投递给 MC_task_print
             socketio.emit("MC_task_print", _account, namespace=_socket_io_name_space)
@@ -636,7 +628,7 @@ def io_task_run2(data):
         socketio.emit('MC_io2', {'status': '清理任务：已经结束！'}, namespace=_socket_io_name_space)
         socketio.emit("MC_io2", {'title': '全部处理完毕！MailClean:task_end'}, namespace=_socket_io_name_space)
         socketio.emit("MC_io2", {'gif': '<i class="fa fa-smile fa-4x"></i>'}, namespace=_socket_io_name_space)
-        if MC_report_task:
+        if _MC_config_ini_obj['task']['mail_enable'] == '1':
             email_report(_socket_task_account_data)
 
 
@@ -654,10 +646,10 @@ def thread_clean_account(account):
     # pop3 login
     try:
         poplib._MAXLINE = 1024 * 1024  # 防止报错: poplib.error_proto: line too long
-        if MC_pop3_ssl:
-            pop3_server = poplib.POP3_SSL(MC_pop3_host, MC_pop3_ssl_port)
+        if _MC_config_ini_obj['pop3']['ssl_enable'] == '1':
+            pop3_server = poplib.POP3_SSL(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['ssl_port'])
         else:
-            pop3_server = poplib.POP3(MC_pop3_host, MC_pop3_port)
+            pop3_server = poplib.POP3(_MC_config_ini_obj['pop3']['host'], _MC_config_ini_obj['pop3']['port'])
         pop3_server.user(_account['user'])
         pop3_server.pass_(_account['pass'])
         pop3_server_status = pop3_server.stat()  # 登录成功后返回消息：(7, 5917225)
@@ -718,7 +710,69 @@ def thread_clean_account(account):
 
 
 if __name__ == '__main__':
-    if os.path.exists(DATABASE)==False:
+    if os.path.exists(DATABASE):
+        print('------ 数据库已就绪：' + DATABASE)
+    else:
         print('--- 数据库初始化 ---')
-        init_db()
-    socketio.run(app, host=MC_web_ip, port=MC_web_port, debug=_MC_debug)
+        create_init_db()
+        # copy_default_db()
+    if not os.path.exists(_MC_config_file):
+        print('------ 配置项初始化：' + DATABASE)
+        _MC_config_ini_obj['flask'] = {}
+        _MC_config_ini_obj['flask']['host'] = '0.0.0.0'
+        _MC_config_ini_obj['flask']['port'] = '8088'
+        _MC_config_ini_obj['flask']['debug'] = '1'
+        _MC_config_ini_obj['flask']['login_user'] = 'admin'
+        _MC_config_ini_obj['flask']['login_pass'] = 'admin'
+        _MC_config_ini_obj['pop3'] = {}
+        _MC_config_ini_obj['pop3']['host'] = '127.0.0.1'
+        _MC_config_ini_obj['pop3']['port'] = '110'
+        _MC_config_ini_obj['pop3']['ssl_enable'] = '1'
+        _MC_config_ini_obj['pop3']['ssl_port'] = '995'
+        _MC_config_ini_obj['smtp'] = {}
+        _MC_config_ini_obj['smtp']['host'] = '127.0.0.1'
+        _MC_config_ini_obj['smtp']['port'] = '25'
+        _MC_config_ini_obj['smtp']['ssl_enable'] = '1'
+        _MC_config_ini_obj['smtp']['ssl_port'] = '465'
+        _MC_config_ini_obj['smtp']['login_user'] = 'test'
+        _MC_config_ini_obj['smtp']['login_pass'] = '123456'
+        _MC_config_ini_obj['task'] = {}
+        _MC_config_ini_obj['task']['mail_enable'] = '0'
+        _MC_config_ini_obj['report'] = {}
+        _MC_config_ini_obj['report']['mail_from'] = 'test@163.com'
+        _MC_config_ini_obj['report']['mail_to'] = "a1@qq.com,a2@qq.com"
+        _MC_config_ini_obj['report']['mail_cc'] = "a1@163.com,a2@163.com"
+
+        _MC_config_ini_obj.write()
+    if _MC_config_ini_obj['flask']['host'] == '' \
+            or _MC_config_ini_obj['flask']['port'] == '' \
+            or _MC_config_ini_obj['flask']['login_user'] == '' \
+            or _MC_config_ini_obj['flask']['login_pass'] == '' \
+            or _MC_config_ini_obj['pop3']['host'] == '' \
+            or _MC_config_ini_obj['pop3']['port'] == '' \
+            or _MC_config_ini_obj['pop3']['ssl_enable'] == '' \
+            or _MC_config_ini_obj['pop3']['ssl_port'] == '' \
+            or _MC_config_ini_obj['task']['mail_enable'] == '':
+        print('------ 发现无效配置：' + _MC_config_file)
+        print('------ 必要参数项[flask]、[pop3]、[task]的各参数值都不能为空！')
+        exit(2)
+    if _MC_config_ini_obj['task']['mail_enable'] == '1':
+        if _MC_config_ini_obj['smtp']['host'] == '' \
+                or _MC_config_ini_obj['smtp']['port'] == '' \
+                or _MC_config_ini_obj['smtp']['ssl_enable'] == '' \
+                or _MC_config_ini_obj['smtp']['ssl_port'] == '' \
+                or _MC_config_ini_obj['smtp']['login_user'] == '' \
+                or _MC_config_ini_obj['smtp']['login_pass'] == '' \
+                or _MC_config_ini_obj['report']['mail_from'] == '' \
+                or _MC_config_ini_obj['report']['mail_to'] == '' \
+                or _MC_config_ini_obj['report']['mail_cc'] == '':
+            print('------ 发现无效配置：' + _MC_config_file)
+            print('------ 因为开启了清理任务邮箱报告，因此[smtp]及[report]的各项配置均不能为空！')
+            exit(3)
+    mc_flask_host = _MC_config_ini_obj['flask']['host']
+    mc_flask_port = _MC_config_ini_obj['flask']['port']
+    if _MC_config_ini_obj['flask']['debug'] == '1':
+        mc_flask_debug = True
+    else:
+        mc_flask_debug = False
+    socketio.run(app, host=mc_flask_host, port=int(mc_flask_port), debug=mc_flask_debug)

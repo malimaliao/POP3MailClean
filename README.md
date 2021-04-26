@@ -7,31 +7,37 @@ pop3 server mail clean.
 本软件采用C/S架构，基于Python3 + Flask + Sqlite3环境部署，使用poplib、smtplib实现POP3服务器远程邮件账号的批量清理，并结合SocketIO 、HTML5技术输出实时清理状态。
 
 
-**软件介绍**
+**【软件介绍】**
 
 POP3MailClean 基于Python3 + Flask + Sqlite3架构，通过pop3协议实现邮件服务器账号批量邮件清理。
 
-**运行环境**
+**【运行环境】**
 
 1，Python 3.7
 
-2，Flask 1.1.1
+2，Flask >= 1.1.1
 
-3，flask-socketio 4.3.0
+3，flask-socketio >= 4.3.0
 
-**使用说明**
+4，configobj
 
-系统运行后，通过浏览器（需支持HTML5浏览器）访问： http://127.0.0.1:8088
+**【使用说明】**
 
-默认账号：admin，默认密码：admin
+\* 本软件自2.2版本开始，软件采用配置文件config.ini来配置软件各项参数（之前的版本则需要手动修改start.py源文件）
 
-更多配置参数可以在系统点击【使用帮助】查看详细使用帮助
+1，打开config.ini进行各项参数的配置（配置说明参照附表）；
+
+2，运行系统运行Pop3MailClean.py，通过浏览器（需支持HTML5浏览器）访问： http://127.0.0.1:8088
+
+* 默认账号：admin，默认密码：admin
+
+* 也可以通过使用帮助查看详细说明
 
 
 
 ---------------------------------
 
-**更新记录**
+**【更新记录】**
 
 v2.1：
 
