@@ -711,13 +711,13 @@ def thread_clean_account(account):
 
 if __name__ == '__main__':
     if os.path.exists(DATABASE):
-        print('------ 数据库已就绪：' + DATABASE)
+        print('------ 数据文件已就绪：' + DATABASE)
     else:
-        print('--- 数据库初始化 ---')
+        print('--- 数据文件初始化 ---')
         create_init_db()
         # copy_default_db()
     if not os.path.exists(_MC_config_file):
-        print('------ 配置项初始化：' + DATABASE)
+        print('------ 配置文件初始化：' + DATABASE)
         _MC_config_ini_obj['flask'] = {}
         _MC_config_ini_obj['flask']['host'] = '0.0.0.0'
         _MC_config_ini_obj['flask']['port'] = '8088'
@@ -755,8 +755,8 @@ if __name__ == '__main__':
             or _MC_config_ini_obj['pop3']['ssl_enable'] == '' \
             or _MC_config_ini_obj['pop3']['ssl_port'] == '' \
             or _MC_config_ini_obj['task']['mail_enable'] == '':
-        print('------ 发现无效配置：' + _MC_config_file)
-        print('------ 必要参数项[flask]、[pop3]、[task]的各参数值都不能为空！')
+        print('------ 发现无效配置文件：' + _MC_config_file)
+        print('------ 配置文件必要参数项[flask]、[pop3]、[task]的各参数值都不能为空！')
         exit(3)
     if _MC_config_ini_obj['task']['mail_enable'] == '1':
         if _MC_config_ini_obj['smtp']['host'] == '' \
@@ -768,9 +768,10 @@ if __name__ == '__main__':
                 or _MC_config_ini_obj['report']['mail_from'] == '' \
                 or _MC_config_ini_obj['report']['mail_to'] == '' \
                 or _MC_config_ini_obj['report']['mail_cc'] == '':
-            print('------ 发现无效配置：' + _MC_config_file)
-            print('------ 因为开启了清理任务邮箱报告，因此[smtp]及[report]的各项配置均不能为空！')
+            print('------ 配置文件发现无效配置：' + _MC_config_file)
+            print('------ 因为开启了清理任务邮箱报告，因此配置文件中[smtp]及[report]的各项配置均不能为空！')
             exit(4)
+    print('------ 配置文件已就绪：' + _MC_config_file)
     mc_flask_host = _MC_config_ini_obj['flask']['host']
     mc_flask_port = _MC_config_ini_obj['flask']['port']
     if _MC_config_ini_obj['flask']['debug'] == '1':
