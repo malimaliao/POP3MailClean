@@ -744,6 +744,8 @@ if __name__ == '__main__':
         _MC_config_ini_obj['report']['mail_cc'] = "a1@163.com,a2@163.com"
 
         _MC_config_ini_obj.write()
+        print('------ 首次运行初始化配置文件已完成，软件已自动停止运行并生成config.ini配置文件。请手动修改config配置各项参数后再次启动本软件即可正常运行！')
+        exit(2)
     if _MC_config_ini_obj['flask']['host'] == '' \
             or _MC_config_ini_obj['flask']['port'] == '' \
             or _MC_config_ini_obj['flask']['login_user'] == '' \
@@ -755,7 +757,7 @@ if __name__ == '__main__':
             or _MC_config_ini_obj['task']['mail_enable'] == '':
         print('------ 发现无效配置：' + _MC_config_file)
         print('------ 必要参数项[flask]、[pop3]、[task]的各参数值都不能为空！')
-        exit(2)
+        exit(3)
     if _MC_config_ini_obj['task']['mail_enable'] == '1':
         if _MC_config_ini_obj['smtp']['host'] == '' \
                 or _MC_config_ini_obj['smtp']['port'] == '' \
@@ -768,7 +770,7 @@ if __name__ == '__main__':
                 or _MC_config_ini_obj['report']['mail_cc'] == '':
             print('------ 发现无效配置：' + _MC_config_file)
             print('------ 因为开启了清理任务邮箱报告，因此[smtp]及[report]的各项配置均不能为空！')
-            exit(3)
+            exit(4)
     mc_flask_host = _MC_config_ini_obj['flask']['host']
     mc_flask_port = _MC_config_ini_obj['flask']['port']
     if _MC_config_ini_obj['flask']['debug'] == '1':
