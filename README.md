@@ -25,7 +25,7 @@ POP3MailClean 基于Python3 + Flask + Sqlite3架构，通过pop3协议实现邮�
 
 \* 本软件自2.2版本开始，软件采用配置文件config.ini来配置软件各项参数（之前的版本则需要手动修改start.py源文件）
 
-1，打开config.ini进行各项参数的配置（配置说明参照附表）；
+1，打开config.ini进行各项参数的配置（配置说明参照附config_help.ini）；
 
 2，运行系统运行Pop3MailClean.py，通过浏览器（需支持HTML5浏览器）访问： http://127.0.0.1:8088
 
@@ -38,6 +38,10 @@ POP3MailClean 基于Python3 + Flask + Sqlite3架构，通过pop3协议实现邮�
 ---------------------------------
 
 **【更新记录】**
+
+v2.2:
+
+* 1，优化软件本地参数配置功能，软件采用config.ini配置系统运行；
 
 v2.1：
 
